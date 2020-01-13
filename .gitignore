@@ -1,0 +1,5 @@
+.*
+!.gitignore
+!/app/code
+!/app/i18n
+!composer.json
