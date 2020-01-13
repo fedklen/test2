@@ -1,0 +1,177 @@
+version: '2'
+services:
+  web:
+    image: nginx:latest
+    env_file: .env
+    ports:
+    ## BEGIN webserver_ports ##
+
+    ## END webserver_ports ##
+    tty: true
+    volumes:
+      - ./.warp/docker/config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./.warp/docker/config/nginx/ssl:/etc/nginx/ssl
+      - ./.warp/docker/config/nginx/auth:/etc/nginx/auth
+      - ${NGINX_CONFIG_FILE}:/etc/nginx/sites-enabled/default.conf
+      - ./.warp/docker/volumes/nginx/logs:/var/log/nginx
+    environment:
+      VIRTUAL_HOST: ${VIRTUAL_HOST}
+    volumes_from:
+      - appdata:ro
+    depends_on:
+      - php
+    networks:
+    ## BEGIN webserver_network_ip ##
+
+    ## END webserver_network_ip ##
+
+  php:
+    image: summasolutions/php:${PHP_VERSION}
+    volumes:
+      - ./.warp/docker/config/php/php.ini:/usr/local/etc/php/php.ini
+      - ./.warp/docker/config/php/php-fpm.conf:/usr/local/etc/php-fpm.conf
+      - ./.warp/docker/config/php/ext-xdebug.ini:/usr/local/etc/php/conf.d/ext-xdebug.ini
+      - ./.warp/docker/config/php/ext-ioncube.ini:/usr/local/etc/php/conf.d/10-php-ext-ioncube.ini
+      - ./.warp/docker/volumes/php-fpm/logs:/var/log/php-fpm
+      - ./.warp/docker/config/crontab/cronfile:/etc/cron.d/cronfile
+      - ./.warp/docker/config/supervisor/conf.d:/etc/supervisor/conf.d
+      - ./.warp/docker/volumes/supervisor/logs:/var/log/supervisor
+    volumes_from:
+      - appdata
+    env_file: .env
+    environment:
+        XDEBUG_CONFIG: ${XDEBUG_CONFIG}
+        PHP_IDE_CONFIG: ${PHP_IDE_CONFIG}
+    depends_on:
+      - appdata
+    user: www-data
+    networks:
+      - back
+
+  appdata:
+    image: alpine:latest
+    volumes:
+      - ~/.composer:/var/www/.composer:delegated
+      - ./.warp/docker/config/appdata/startup.sh:/startup.sh
+      - ./.warp/docker/config/bash/.bashrc:/var/www/.bashrc
+      - ./.warp/docker/config/bash/.bashrc:/root/.bashrc
+      - .:/var/www/html
+    command: /bin/sh /startup.sh
+
+  mysql:
+    image: mysql:${MYSQL_VERSION}
+    env_file: .env
+    ports:
+      - "${DATABASE_BINDED_PORT}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USER}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - "./.warp/docker/config/mysql/my.cnf:/etc/mysql/my.cnf"
+      - "./.warp/docker/dumps:/dumps"
+      - "${MYSQL_CONFIG_FILE}:/etc/mysql/conf.d"
+      - "./.warp/docker/volumes/mysql:/var/lib/mysql"
+    networks:
+      - back
+
+  elasticsearch:
+    image: summasolutions/elasticsearch:${ES_VERSION}
+    env_file: .env
+    ports:
+      - "9200"
+      - "9300"
+    environment:
+      - "ES_JAVA_OPTS=-Xms${ES_MEMORY} -Xmx${ES_MEMORY}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - "./.warp/docker/volumes/elasticsearch:/usr/share/elasticsearch/data"
+    networks:
+      - back
+
+  redis-cache:
+    image: redis:${REDIS_CACHE_VERSION}
+    env_file: .env
+    ports:
+      - "6379"
+    #volumes:
+    #  - "./.warp/docker/volumes/redis-cache:/data"
+    #  - ${REDIS_CACHE_CONF}:/usr/local/etc/redis/redis.conf
+    #command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    networks:
+      - back
+
+  redis-session:
+    image: redis:${REDIS_SESSION_VERSION}
+    env_file: .env
+    ports:
+      - "6379"
+    #volumes:
+    #  - "./.warp/docker/volumes/redis-session:/data"
+    #  - ${REDIS_SESSION_CONF}:/usr/local/etc/redis/redis.conf
+    #command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    networks:
+      - back
+
+  redis-fpc:
+    image: redis:${REDIS_FPC_VERSION}
+    env_file: .env
+    ports:
+      - "6379"
+    #volumes:
+    #  - "./.warp/docker/volumes/redis-fpc:/data"
+    #  - ${REDIS_FPC_CONF}:/usr/local/etc/redis/redis.conf
+    #command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    networks:
+      - back
+
+  mailhog:
+    image: mailhog/mailhog
+    env_file: .env
+    hostname: "mailhog"
+    ports:
+      - 1025
+      - "${MAILHOG_BINDED_PORT}:8025"
+    networks:
+      - back
+
+  proxy:
+    image: nginx:latest
+    env_file: .env
+    ports:
+    ## BEGIN proxy_ports ##
+
+    ## END proxy_ports ##
+    links:
+      - varnish
+    tty: true
+    volumes:
+      - ./.warp/docker/config/nginx/ssl:/etc/nginx/ssl
+      - ./.warp/docker/config/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./.warp/docker/config/nginx/sites-enabled/proxy.conf:/etc/nginx/sites-enabled/default.conf
+    environment:
+      VIRTUAL_HOST: ${VIRTUAL_HOST}
+    networks:
+    ## BEGIN proxy_network_ip ##
+
+    ## END proxy_network_ip ##
+
+  varnish:
+    image: summasolutions/varnish:${VARNISH_VERSION}
+    ports:
+      - "80"
+    links:
+      - web
+    volumes:
+      - ./.warp/docker/config/varnish/default.vcl:/etc/varnish/default.vcl
+    networks:
+      - back
+
+networks:
+  ## BEGIN networks ##
+
+  ## END networks ##
